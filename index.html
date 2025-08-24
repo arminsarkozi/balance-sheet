@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Idea Balance Sheet</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
       --bg:#f9fafb; --card:#ffffff; --muted:#f3f4f6;
@@ -86,7 +87,17 @@
     <div class="muted">Tip: scores 0–10; weights free-scale (not normalized).</div>
   </div>
 
-  <div id="results"><strong>Results will appear here after calculation.</strong></div>
+   <div id="results" style="display:flex; align-items:flex-start; padding:14px; background:var(--accent); border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.05); gap:10px;">
+  <div id="resultsText" style="flex:2; min-width:200px;">
+    <strong>Results will appear here after calculation.</strong>
+  </div>
+  <div style="flex:1; max-width:700px;">
+    <canvas id="radarChart" style="width:100%; height:100%;"></canvas>
+  </div>
+</div>
+
+
+
 
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -168,7 +179,8 @@
       const best=Object.entries(results).filter(([,v])=>v===max).map(([k])=>k);
       output+=best.length>1?`<p><strong>Best choice:</strong> ${best.join(", ")} — Tie</p>`:`<p><strong>Best choice:</strong> ${best[0]}</p>`;
       output+=`<p class="muted">Calculation: for each idea, sum(weight × score) across all factors.</p>`;
-      document.getElementById("results").innerHTML=output;
+      document.getElementById("resultsText").innerHTML = output;
+      updateRadarChart(results);
       return results;
     }
 
@@ -255,6 +267,49 @@
       },{offset:-Infinity,element:null}).element;
     }
     document.querySelectorAll("#balanceTable tbody tr").forEach(attachRowBehaviors);
+
+
+    /* ==== RADAR CHART ==== */
+    let radarChart; // global chart variable
+
+    function updateRadarChart() {
+        const table = document.getElementById('balanceTable');
+        const ideaNames = getIdeaNames();
+        const tbody = table.tBodies[0];
+
+        const labels = [...tbody.rows].map(row => row.cells[2].innerText.trim()); // factors
+        const datasets = ideaNames.map((idea, i) => {
+            const data = [...tbody.rows].map(row => parseFloat(row.cells[i + 4].querySelector('input').value || 0) *
+            parseFloat(row.cells[3].querySelector('input').value || 0));
+            const color = `hsl(${(i*360/ideaNames.length)},70%,50%)`;
+            return {
+            label: idea,
+            data: data,
+            fill: false,
+            backgroundColor: color.replace('50%)', '20%)'),
+            borderColor: color,
+            pointBackgroundColor: color,
+            };
+        });
+
+        const ctx = document.getElementById('radarChart').getContext('2d');
+        if (radarChart) radarChart.destroy(); // clear previous chart
+        radarChart = new Chart(ctx, {
+            type: 'radar',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                scales: {
+                    r: { beginAtZero: true }
+                },
+                plugins: {
+                    legend: { position: 'top' }
+                }
+            }
+        });
+    }
+
   </script>
+  <!--<canvas id="radarChart" width="300" height="300" style="display:block;margin:20px auto;"></canvas>-->
 </body>
 </html>
