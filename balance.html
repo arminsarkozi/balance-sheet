@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Idea Balance Sheet</title>
+  <style>
+    :root {
+      --bg:#f9fafb; --card:#ffffff; --muted:#f3f4f6;
+      --text:#111827; --border:#e5e7eb;
+      --primary:#2563eb; --primary-dark:#1d4ed8;
+      --danger:#ef4444; --danger-dark:#b91c1c;
+      --accent:#eef2ff;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;color:var(--text);background:var(--bg);}
+    h1{text-align:center;margin:0 0 18px;}
+    .btn-row{text-align:center;margin-bottom:12px;}
+    button{margin:5px;padding:8px 12px;border:none;border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;}
+    button:hover{background:var(--primary-dark);}
+    .remove-btn{background:var(--danger);padding:4px 8px;border-radius:4px;}
+    .remove-btn:hover{background:var(--danger-dark);}
+    table{width:100%;border-collapse:collapse;background:var(--card);box-shadow:0 2px 6px rgba(0,0,0,0.08);border-radius:10px;overflow:hidden;}
+    th,td{border:1px solid var(--border);padding:8px;text-align:center;vertical-align:middle;}
+    thead th{background:var(--muted);}
+    input[type="number"]{width:70px;padding:4px;}
+    .idea-name[contenteditable="true"]{outline:none;padding:2px 4px;border-radius:4px;}
+    .drag-handle{cursor:grab;user-select:none;font-size:16px;line-height:1;display:inline-block;padding:2px 6px;}
+    tr.dragging{opacity:0.5;}
+    #results{margin-top:16px;padding:14px;background:var(--accent);border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,0.05);}
+    .left-col,.handle-col{width:44px;}
+    .weight-col{width:110px;}
+    .factor-col{min-width:160px;}
+    .muted{color:#6b7280;font-size:12px;}
+  </style>
+</head>
+<body>
+  <h1>Idea Balance Sheet Calculator</h1>
+
+  <div class="btn-row">
+    <button onclick="addIdea()">➕ Add Idea</button>
+    <button onclick="addFactor()">➕ Add Factor</button>
+    <button onclick="calculate()">⚖️ Calculate</button>
+    <button onclick="exportPDF()">📄 Export PDF</button>
+    <button onclick="exportXLSX()">📊 Export XLSX</button>
+  </div>
+
+  <div id="tableWrapper">
+    <table id="balanceTable">
+      <thead>
+        <tr>
+          <th class="left-col"></th>
+          <th class="handle-col"></th>
+          <th class="factor-col">Factor</th>
+          <th class="weight-col">Weight</th>
+          <th><span class="idea-name" contenteditable="true">Idea 1</span><button class="remove-btn" onclick="removeIdea(this)">X</button></th>
+          <th><span class="idea-name" contenteditable="true">Idea 2</span><button class="remove-btn" onclick="removeIdea(this)">X</button></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><button class="remove-btn" onclick="removeFactor(this)">X</button></td>
+          <td><span class="drag-handle">☰</span></td>
+          <td contenteditable="true">Personal fit</td>
+          <td><input type="number" value="1" step="0.1"></td>
+          <td><input type="number" value="0" min="0" max="10"></td>
+          <td><input type="number" value="0" min="0" max="10"></td>
+        </tr>
+        <tr>
+          <td><button class="remove-btn" onclick="removeFactor(this)">X</button></td>
+          <td><span class="drag-handle">☰</span></td>
+          <td contenteditable="true">Target group</td>
+          <td><input type="number" value="1" step="0.1"></td>
+          <td><input type="number" value="0" min="0" max="10"></td>
+          <td><input type="number" value="0" min="0" max="10"></td>
+        </tr>
+        <tr>
+          <td><button class="remove-btn" onclick="removeFactor(this)">X</button></td>
+          <td><span class="drag-handle">☰</span></td>
+          <td contenteditable="true">External parties</td>
+          <td><input type="number" value="1" step="0.1"></td>
+          <td><input type="number" value="0" min="0" max="10"></td>
+          <td><input type="number" value="0" min="0" max="10"></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="muted">Tip: scores 0–10; weights free-scale (not normalized).</div>
+  </div>
+
+  <div id="results"><strong>Results will appear here after calculation.</strong></div>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <script>
+    // ===== helpers =====
+    function getHeaderRow(){return document.getElementById('balanceTable').rows[0];}
+    function getIdeaCount(){return getHeaderRow().cells.length-4;}
+    function getIdeaNames(){
+      return [...document.querySelectorAll('#balanceTable thead th')].slice(4).map(th=>{
+        const span=th.querySelector('.idea-name');
+        return (span?span.innerText:th.textContent.replace('X','')).trim();
+      });
+    }
+    function fileSafeName(str){return str.toLowerCase().replace(/[\s_-]+/g,'-');}
+
+    // ===== add/remove ideas/factors =====
+    function addIdea(){
+      const table=document.getElementById('balanceTable');
+      const headerRow=table.rows[0];
+      const newIdx=getIdeaCount()+1;
+      const th=document.createElement('th');
+      th.innerHTML=`<span class="idea-name" contenteditable="true">Idea ${newIdx}</span><button class="remove-btn" onclick="removeIdea(this)">X</button>`;
+      headerRow.appendChild(th);
+      for(let row of table.tBodies[0].rows){
+        const td=document.createElement('td');
+        const input=document.createElement('input');
+        input.type="number";input.value=0;input.min=0;input.max=10;
+        td.appendChild(input);row.appendChild(td);
+      }
+    }
+    function removeIdea(btn){
+      const table=document.getElementById('balanceTable');
+      if(getIdeaCount()<=2){alert("At least 2 ideas required.");return;}
+      const idx=btn.closest('th').cellIndex;
+      for(let row of table.rows){row.deleteCell(idx);}
+    }
+    function addFactor(){
+      const table=document.getElementById('balanceTable');
+      const headerCells=table.rows[0].cells;
+      const row=table.tBodies[0].insertRow(-1);
+      row.innerHTML=`<td><button class="remove-btn" onclick="removeFactor(this)">X</button></td>
+        <td><span class="drag-handle">☰</span></td>
+        <td contenteditable="true">New Factor</td>
+        <td><input type="number" value="1" step="0.1"></td>`;
+      for(let i=4;i<headerCells.length;i++){
+        const td=row.insertCell(-1);
+        const input=document.createElement('input');input.type="number";input.value=0;input.min=0;input.max=10;
+        td.appendChild(input);
+      }
+      attachRowBehaviors(row);
+    }
+    function removeFactor(btn){
+      const tbody=document.querySelector('#balanceTable tbody');
+      if(tbody.rows.length<=1){alert("At least 1 factor required.");return;}
+      btn.closest('tr').remove();
+    }
+
+    // ===== calculation =====
+    function calculate(){
+      const table=document.getElementById('balanceTable');
+      const ideaNames=getIdeaNames();
+      const results={}; ideaNames.forEach(n=>results[n]=0);
+      const tbody=table.tBodies[0];
+      for(let row of tbody.rows){
+        const weight=parseFloat(row.cells[3].querySelector('input').value)||0;
+        for(let c=4;c<row.cells.length;c++){
+          const score=parseFloat(row.cells[c].querySelector('input').value)||0;
+          results[ideaNames[c-4]]+=weight*score;
+        }
+      }
+      let output="<h3>Final Scores</h3><ul>";
+      for(const [idea,score] of Object.entries(results)){
+        output+=`<li><strong>${idea}:</strong> ${score.toFixed(2)}</li>`;
+      }
+      output+="</ul>";
+      const max=Math.max(...Object.values(results));
+      const best=Object.entries(results).filter(([,v])=>v===max).map(([k])=>k);
+      output+=best.length>1?`<p><strong>Best choice:</strong> ${best.join(", ")} — Tie</p>`:`<p><strong>Best choice:</strong> ${best[0]}</p>`;
+      output+=`<p class="muted">Calculation: for each idea, sum(weight × score) across all factors.</p>`;
+      document.getElementById("results").innerHTML=output;
+      return results;
+    }
+
+    // ===== export PDF =====
+    function exportPDF(){
+      const problemName=prompt("Enter problem/idea name:"); if(!problemName)return;
+      calculate();
+      const container=document.createElement("div");
+      const title=document.createElement("h2");title.style.textAlign="center";title.textContent="Idea Balance Sheet";container.appendChild(title);
+      const subtitle=document.createElement("h3");subtitle.style.textAlign="center";subtitle.textContent=problemName;container.appendChild(subtitle);
+      container.appendChild(document.getElementById("tableWrapper").cloneNode(true));
+      container.appendChild(document.getElementById("results").cloneNode(true));
+      html2pdf().from(container).set({filename:fileSafeName(problemName)+".pdf",margin:10}).save();
+    }
+
+    function exportXLSX(){
+        const problemName = prompt("Enter problem/idea name:");
+        if(!problemName) return;
+
+        const table = document.getElementById('balanceTable');
+        const ideaNames = getIdeaNames();
+        const tbody = table.tBodies[0];
+
+        // Convert table to array for SheetJS
+        const data = [["Idea Balance Sheet"], [problemName], [], ["Factor", "Weight", ...ideaNames]];
+
+        // Fill factor rows
+        tbody.querySelectorAll("tr").forEach(row => {
+            const factor = row.cells[2].innerText.trim();
+            const weight = parseFloat(row.cells[3].querySelector('input').value) || 0;
+            const scores = [...row.cells].slice(4).map(td => parseFloat(td.querySelector('input').value) || 0);
+            data.push([factor, weight, ...scores]);
+        });
+
+        // Add empty row
+        data.push([]);
+
+        // Create formulas dynamically for totals
+        const startRow = 5; // Excel row where factors start (1-indexed)
+        const endRow = startRow + tbody.rows.length - 1;
+
+        data.push(["Results"]);
+        ideaNames.forEach((idea, i) => {
+            const colLetter = XLSX.utils.encode_col(i + 2); // +2 because factor=0, weight=1
+            const formula = `SUMPRODUCT(B${startRow}:B${endRow},${colLetter}${startRow}:${colLetter}${endRow})`;
+            data.push([idea, {f: formula}]);
+        });
+
+        // Add calculation note
+        data.push([]);
+        data.push(["Calculation", "Each idea = sum(weight × score)"]);
+
+        // Create worksheet
+        const ws = XLSX.utils.aoa_to_sheet(data);
+
+        // Set workbook and write
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+        XLSX.writeFile(wb, fileSafeName(problemName) + ".xlsx");
+    }
+
+
+    // ===== drag reorder =====
+    function attachRowBehaviors(row){
+      const tbody=document.querySelector("#balanceTable tbody");
+      const handle=row.querySelector(".drag-handle");
+      row.removeAttribute('draggable');
+      handle.addEventListener("mousedown",()=>{row.setAttribute("draggable","true");});
+      ["mouseup","mouseleave"].forEach(ev=>handle.addEventListener(ev,()=>row.removeAttribute("draggable")));
+      row.addEventListener("dragstart",()=>row.classList.add("dragging"));
+      row.addEventListener("dragend",()=>{row.classList.remove("dragging");row.removeAttribute("draggable");});
+      tbody.addEventListener("dragover",e=>{
+        e.preventDefault();
+        const dragging=tbody.querySelector("tr.dragging"); if(!dragging)return;
+        const after=getDragAfterRow(tbody,e.clientY);
+        if(!after)tbody.appendChild(dragging); else tbody.insertBefore(dragging,after);
+      });
+    }
+    function getDragAfterRow(tbody,y){
+      const rows=[...tbody.querySelectorAll("tr:not(.dragging)")];
+      return rows.reduce((closest,child)=>{
+        const box=child.getBoundingClientRect();const offset=y-box.top-box.height/2;
+        if(offset<0&&offset>closest.offset){return{offset,element:child};} else{return closest;}
+      },{offset:-Infinity,element:null}).element;
+    }
+    document.querySelectorAll("#balanceTable tbody tr").forEach(attachRowBehaviors);
+  </script>
+</body>
+</html>
